@@ -1,0 +1,33 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Mar 27 22:54:04 2019
+
+@author: ASUS
+"""
+
+
+# 创建一个自然数序列，类型为ndarray
+import numpy as np
+arr = np.arange(10)
+
+
+# pandas读取xls表格
+import pandas as pd
+xls = pd.ExcelFile('F:\学术相关程序\林云数据处理\面板数据_20181115.xls')
+table = xls.parse('Sheet1')
+
+
+# 这里的索引和matlab一致，表示index =1 ，column name = ‘city’的那个数据点
+table.loc[1,'city'] = 1  #当没有某个列名时，表格会自动创建一列为该列名
+
+out = pd.ExcelWriter('F:/test.xlsx')
+table.to_excel(out)
+out.save()    #多出来一列索引
+
+
+# 指定列名读取csv文件
+pd.read_csv('data/ch04/data_without_header.csv', names=['a', 'b', 'c', 'd', 'message']) #指定列名
+pd.read_csv('data/ch04/data_without_header.csv', header=None) #没有列名
+
+#为不同列指定表示空缺的字符串
+pd.read_csv('data/ch04/data_lost.csv', na_values={'message': ['foo'], 'something': ['two']}) 
