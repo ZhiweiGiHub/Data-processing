@@ -1,0 +1,30 @@
+1.
+"""
+import numpy as np
+import tushare as ts
+import pandas as pd
+from datetime import datetime,timedelta
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)  #关闭警告
+#先从tushare导入数据
+#def get_daily_historic_data(ts_code,start_date,end_date):
+#    pro = ts.pro_api()
+#    price = pro.daily(ts_code = ts_code,start_date = start_date,end_date = end_date)
+#    return price
+#yf_data = get_daily_historic_data(ts_code = '000001.SZ',start_date = '20160101',end_date = '20171231')
+
+#period_stock_data=yf_data.resample('M',how='last')
+
+date=pd.date_range("2018-03-17","2018-03-30",freq="D")
+pydate_array = date.to_pydatetime()
+date_only_array = np.vectorize(lambda s: s.strftime('%Y-%m-%d'))(pydate_array)
+#vectorize是一个将函数应用到array上的高级函数。strftime时用来格式化日期的
+date_only_series = pd.Series(date_only_array)#将np.array变化为pd。series
+
+start_date = '2018-03-17'
+end_date = '2018-03-30'
+start_date = datetime.strptime(start_date, "%Y-%m-%d")  #注意，这里将原来的字符串转化为datetime类
+start_date = start_date-timedelta(days=1)  #用来对格式化的日期进行调整
+start_date = start_date.strftime("%Y-%m-%d")   #这里重新转换datetime类为string
+date_list=date_only_series.values.tolist()
+date_list.insert(0,start_date)  #把第3-16这个日期加进去（0位置）
