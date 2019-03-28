@@ -31,3 +31,102 @@ pd.read_csv('data/ch04/data_without_header.csv', header=None) #没有列名
 
 #为不同列指定表示空缺的字符串
 pd.read_csv('data/ch04/data_lost.csv', na_values={'message': ['foo'], 'something': ['two']}) 
+
+
+
+
+
+##############################################
+import pymongo
+import pandas as pd
+import numpy as np
+import os
+import pymysql
+from datetime import datetime
+import time
+
+from dateutil.parser import parse
+
+# 连接Mongodb
+myclient = pymongo.MongoClient("192.168.0.119", 27017)
+myclient.admin.authenticate("root", "rgf12345")
+
+def hsi_import():
+    df = pd.read_csv("E:/20190324/hsi.csv").drop(columns='COUNT')
+    col_name = df.columns.values.tolist()
+    mydb = myclient['basic_info']
+    mycol = mydb['hsi']
+    for i in range(len(df)):
+        mydict = {col_name[0]: df[col_name[0]][i],col_name[1]: df[col_name[1]][i],\
+                  col_name[2]: df[col_name[2]][i],col_name[3]: df[col_name[3]][i], \
+                  col_name[4]: df[col_name[4]][i]}
+        mycol.insert_one(mydict)
+
+hsi_import()    #没有更新功能
+
+
+# 从MySQL读取交易日数据
+con = pymysql.connect(host='192.168.0.119', user='jydb', passwd='jydb', database='jydb')
+sql_select = 'SELECT TradingDate FROM jydb.qt_tradingdaynew where \
+TradingDate >= 20100101 and SecuMarket = 72 and IfTradingDay = 1;'
+tradingdays = pd.read_sql(sql_select, con)   #Time_stamp类型
+con.close()
+
+tradingdays_list = []
+for i in range(len(tradingdays)):
+    tradingdays_list.append(str(tradingdays['TradingDate'][i])[0:10])   #所有交易日的list(取前10个字符)
+
+def semi_import():
+    filePath = "E:/20190324/semi"
+    file_list = os.listdir(filePath)
+    for file in file_list[0:1]:
+        df = pd.read_csv(filePath + '/' + file)     #注意这里df是乱序的
+
+        # aa = df.columns.values.tolist()  # 返回所有的列名
+        df.sort_values(by=['Income Statement Source Date', 'Period End Date'], ascending = True, inplace = True)
+        unique_dates = df['Income Statement Source Date'].unique()
+
+        dates_reserve = pd.DataFrame()
+        for i in range(len(unique_dates)):
+            unique_date = unique_dates[i]  # 找到本次需要筛选的日期
+            dates_needs_filter = df[df['Income Statement Source Date'] == unique_date]
+            if len(dates_needs_filter) < 2:
+                dates_reserve = dates_reserve.append(dates_needs_filter, ignore_index=True)
+                continue
+            else:
+                date_reserve = dates_needs_filter.iloc[len(dates_needs_filter)-1]
+                dates_reserve = dates_reserve.append(date_reserve, ignore_index=True)
+
+        # df["Income Statement Source Date"] = pd.to_datetime(df["Income Statement Source Date"])
+        # df.index = df['Income Statement Source Date']
+        # #del df['Income Statement Source Date']
+        # df = df.sort_index(axis=0)
+
+        # merge两张表
+        tradingdays = pd.DataFrame({'Income Statement Source Date':tradingdays_list})
+        nan_data =  pd.merge(tradingdays, dates_reserve, how='left')
+        indexcol = nan_data['Instrument'].notnull()    #非nan的地方为True
+        valuelist = []
+        for i in range(len(indexcol)):      # 获得所有非nan值在原表的索引
+            if indexcol[i] == True:
+                valuelist.append(i)
+
+        fill_data = nan_data.fillna(method='ffill')
+
+
+        # # 填充缺失值
+        # for v_row in range(len(valuelist)):
+        #     if v_row == 0:
+        #         for row in range(0, valuelist[v_row]):
+        #             reserve_date = nan_data.loc[row, ['Income Statement Source Date']]
+        #             nan_data.iloc[row] = np.nan
+        #             nan_data.loc[row, ['Income Statement Source Date']] = reserve_date  # 保留Income Statement Source Date
+        #     elif v_row == len(valuelist) - 1:  # 运行到最后一个有值的点
+        #         for row in range(valuelist[v_row], len(nan_data)):
+        #             nan_data.iloc[row] = nan_data.iloc[valuelist[v_row]]
+        #         break
+        #     else:
+        #         for row in range(valuelist[v_row] + 1, valuelist[v_row]):
+        #             nan_data.iloc[row] = nan_data.iloc[valuelist[v_row]]
+
+        
