@@ -128,5 +128,105 @@ def semi_import():
         #     else:
         #         for row in range(valuelist[v_row] + 1, valuelist[v_row]):
         #             nan_data.iloc[row] = nan_data.iloc[valuelist[v_row]]
-
         
+        
+#########################################增加了更复杂的循环导入
+        import pymongo
+import pandas as pd
+import numpy as np
+import os
+import pymysql
+from datetime import datetime
+import time
+
+from dateutil.parser import parse
+
+# 连接Mongodb
+myclient = pymongo.MongoClient("192.168.0.119", 27017)
+myclient.admin.authenticate("root", "rgf12345")
+
+def hsi_import():
+    df = pd.read_csv("E:/20190324/hsi.csv").drop(columns='COUNT')
+    col_name = df.columns.values.tolist()
+    mydb = myclient['basic_info']
+    mycol = mydb['hsi']
+    for i in range(len(df)):
+        mydict = {col_name[0]: df[col_name[0]][i],col_name[1]: df[col_name[1]][i],\
+                  col_name[2]: df[col_name[2]][i],col_name[3]: df[col_name[3]][i], \
+                  col_name[4]: df[col_name[4]][i]}
+        mycol.insert_one(mydict)
+
+hsi_import()    #没有更新功能
+
+
+# 从MySQL读取交易日数据
+con = pymysql.connect(host='192.168.0.119', user='jydb', passwd='jydb', database='jydb')
+sql_select = 'SELECT TradingDate FROM jydb.qt_tradingdaynew where \
+TradingDate >= 20100101 and SecuMarket = 72 and IfTradingDay = 1 and TradingDate <= 20191231;'
+tradingdays = pd.read_sql(sql_select, con)   #Time_stamp类型
+con.close()
+
+tradingdays_list = []
+for i in range(len(tradingdays)):
+    tradingdays_list.append(str(tradingdays['TradingDate'][i])[0:10])   #所有交易日的list(取前10个字符)
+
+
+
+
+def filedata(filePath):
+    file_list = os.listdir(filePath)
+    for file in file_list[0:1]:                     #先做第一个文件
+        df = pd.read_csv(filePath + '/' + file)     #注意这里df是乱序的
+
+        # aa = df.columns.values.tolist()  # 返回所有的列名
+        df.sort_values(by=['Income Statement Source Date', 'Period End Date'], ascending = True, inplace = True)
+        unique_dates = df['Income Statement Source Date'].unique()
+
+        dates_reserve = pd.DataFrame()
+        for i in range(len(unique_dates)):
+            unique_date = unique_dates[i]  # 找到本次需要筛选的日期
+            dates_needs_filter = df[df['Income Statement Source Date'] == unique_date]
+            if len(dates_needs_filter) < 2:
+                dates_reserve = dates_reserve.append(dates_needs_filter, ignore_index=True)
+                continue
+            else:
+                date_reserve = dates_needs_filter.iloc[len(dates_needs_filter)-1]
+                dates_reserve = dates_reserve.append(date_reserve, ignore_index=True)
+
+
+        # merge两张表
+        tradingdays = pd.DataFrame({'Income Statement Source Date':tradingdays_list})
+        nan_data =  pd.merge(tradingdays, dates_reserve, how='left')
+        indexcol = nan_data['Instrument'].notnull()    #非nan的地方为True
+        valuelist = []
+        for i in range(len(indexcol)):      # 获得所有非nan值在原表的索引
+            if indexcol[i] == True:
+                valuelist.append(i)
+        # 填充nan
+        fill_data = nan_data.fillna(method='ffill')
+        return fill_data
+
+
+
+
+filePath = "E:/20190324/semi"
+fill_data_semi = filedata(filePath)
+
+# 写入mongodb
+mydb = myclient['hk_stocks_financial_data']
+name = 'hk_'+ '0' + file[0:4] + '_fs_' + 'derivative'
+mycol = mydb[name]
+
+
+
+for i in range(len(fill_data_semi)):
+    mydict = {}
+    for j in range(fill_data_semi.shape[1]):    # 生成列名
+        colname = fill_data_semi.columns.values.tolist()[j]
+        colname = colname.replace('.', '_')  # 替换掉列名里面的.
+
+        mydict.update({colname: fill_data_semi[fill_data_semi.columns.values.tolist()[j]][i]})
+
+
+    mycol.insert_one(mydict)    #第一次用insert，后面用update
+
