@@ -1,0 +1,15 @@
+# # 替换字符串
+# aa = filled_data.columns.values.tolist()
+# aa_new = []
+# for i in aa:
+#     i = i.replace(' ', '_')
+#     i = i.replace('.', '_')
+#     i = i.replace('/', '_')
+#     i = i.replace('-', '_')
+#     i = i.replace(',', '')
+#     i = i.replace('(', '')
+#     i = i.replace(')', '')
+#     i = i.replace(' ', '')
+#     aa_new.append(i)
+# aa_new = pd.DataFrame(aa_new)
+# aa_new.to_csv('name.csv',encoding = 'utf-8')
