@@ -1,0 +1,21 @@
+# 对某个文件夹中的文件按大小排序，并输出到csv文件里
+def get_empty(filename,num):
+    import os
+    import pandas as pd
+    filePath = "E:/20190324/"+filename
+    file_list = os.listdir(filePath)
+    size = []
+    for file in file_list:
+        path = filePath+'/'+ file
+        size.append(os.path.getsize(path))
+
+    file_size = pd.DataFrame({'code': file_list, 'size':size})
+    file_size = file_size.sort_values(by = ['size','code'])
+    lost_file_list = file_size.iloc[0:num]
+    export_name = filename + '.csv'
+    lost_file_list.to_csv(export_name,encoding='utf-8')
+
+
+get_empty('semi',366)
+get_empty('is_bs_cf_fy',365)
+
