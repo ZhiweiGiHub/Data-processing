@@ -131,9 +131,16 @@ for i in range(len(tradingdays)):
                     open_collapse = get_dailyquote_single(user, passwd, iii, order_type, ddd).values[0][0]
                     money_collapse = (open_collapse * (1 - fee_sell) - df_md[j, 2]) * df_md[j, 1] * df_md[j, 3]  # 平仓收益
                     
+                    ##to do：1 记录有几只卖不掉 
+                    ## 2 df_md最后几只的持仓改为df_md_old中的持仓信息（更新市值）
+                    ## 3 记录df_md中没有调仓成功的股票（2中提到的最后几只）
+                   
                     
             for j in range(len(df0)):    # 对于新持仓的的股票
                 iii = df0['InnerCode'][j]
+                
+                ##to do: 加一个判断，如果其不是没有调仓成功的股票（停牌的）
+                
                 df_md[j, 0] = df_ret['capital'][i - 1] * df0['weight'][j]
                 df_md[j, 1] = basic_info_all[basic_info_all['InnerCode'] == iii]['TradingUnit'].values[0]
                 df_md[j, 2] = get_dailyquote_single(user, passwd, iii, order_type, ddd).values[0][0]
@@ -145,6 +152,9 @@ for i in range(len(tradingdays)):
                 
                 # 对已持有的股票进行调整
                 if iii in df0_old['InnerCode'].tolist():
+                
+                # to do :加一个判断，如果不是停牌的
+                    
                     index = df0_old['InnerCode'].tolist().index(iii)   # 找到这些股票旧的持仓表中的位置
                     try:  # 除权除息
                         adj_info = get_adj_info(user, passwd, iii, ddd).values[0]
@@ -156,8 +166,7 @@ for i in range(len(tradingdays)):
                         
                     
                     lot_add = (df_md[j, 0] - df_md_old[index, 0]) / df_md[j, 2] / df_md[j, 1]
-                    
-                    # to do： 判断是否能卖出，否则跳过下面的判断
+                   
                     if lot_add <= 0:
                         lot_add = int(-lot_add)
                         money_sell = money_sell + lot_add * df_md[j, 1] * df_md[j, 2]
@@ -166,14 +175,20 @@ for i in range(len(tradingdays)):
                         lot_add = int(lot_add)
                         money_buy = money_buy + lot_add * df_md[j, 1] * df_md[j, 2]
                         money_change_fee = money_change_fee + money_buy * fee_buy
+                     
                     df_md[j, 5] = money_change_fee
                     df_md[j, 7] = get_dailyquote_single(user, passwd, iii, 'ClosePrice', ddd).values[0][0]
+                    
+                    
+                    
                 else:
                     lot_add = int(df_md[j, 0] / df_md[j, 2] / df_md[j, 1])
                     money_buy = money_buy + lot_add * df_md[j, 2] * df_md[j, 3]
                     money_change_fee = money_change_fee + money_buy * fee_buy
                     df_md[j, 5] = money_change_fee
                     df_md[j, 7] = get_dailyquote_single(user, passwd, iii, 'ClosePrice', ddd).values[0][0]
+                    
+                    
             df_ret['profit'][i] = money_collapse + sum(
                 (df_md[:, 7] - df_md[:, 2]) * df_md[:, 1] * df_md[:, 3] - df_md[:, 5])
             df_ret['capital'][i] = df_ret['capital'][i - 1] + df_ret['profit'][i]
