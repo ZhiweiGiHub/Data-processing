@@ -27,18 +27,20 @@ basic_info_all = basic_info_all.reset_index(drop=True)
 change_days = []
 choose_days = []
 tradingdays_weekday = int2datetime(tradingdays)['tradingdays'].dt.weekday
-for i in range(len(tradingdays_weekday) - 1):
-    if tradingdays_weekday[i] == 4:
+for i in range(len(tradingdays_weekday) - 1):   # 取出了交易日中的选股日和调仓日
+    if tradingdays_weekday[i] == 4:             # 调仓日：星期五
         choose_days.append(tradingdays['tradingdays'][i])
         change_days.append(tradingdays['tradingdays'][i + 1])
 
 df_pos_all = pd.DataFrame(columns=['date', 'InnerCode', 'weight'])
 for i in range(len(choose_days)):
     print("current choose day is: ", choose_days[i])
-    index_end = tradingdays_back[tradingdays_back['tradingdays'] == choose_days[i]].index[0]
-    bbb = tradingdays_back['tradingdays'][index_end - 19]
+    index_end = tradingdays_back[tradingdays_back['tradingdays'] == choose_days[i]].index[0]  # 找到当前选股日在交易日总表中的位置
+    bbb = tradingdays_back['tradingdays'][index_end - 19]     # 当前选股日回溯20天
     eee = tradingdays_back['tradingdays'][index_end]
-    df = pd.DataFrame(columns=basic_info_all['InnerCode'].tolist(), index=range(20))
+    
+    ###############选股信息表#############
+    df = pd.DataFrame(columns=basic_info_all['InnerCode'].tolist(), index=range(20))   
     for iii in basic_info_all['InnerCode']:
         try:
             df[iii] = get_dailyquote_many(user, passwd, iii, 'TurnoverValue', bbb, eee).values
@@ -49,14 +51,23 @@ for i in range(len(choose_days)):
     df_mean['InnerCode'] = basic_info_all['InnerCode'].values
     df_mean['mean_values'] = df.mean(0).values
     df_mean = df_mean.sort_values(by='mean_values', ascending=False).reset_index(drop=True)
-    changeday_index = tradingdays['tradingdays'][tradingdays['tradingdays']==change_days[i]].index[0] # 第一个changeday在整个时间表中的位置
+    
+
+    # 获得第i个changeday所有股票的TurnoverValue
+    
+    # 在df_mean中建立新的一列，表示是否能在changeday买到
     df_mean['able_to_buy'] = 0
+    
+    # 在新的一列中赋值changeday的TurnoverValue
     for jj in range(len(df_mean['InnerCode'])):
         stock = df_mean['InnerCode'][jj]
         df_mean['able_to_buy'][jj] = df[stock][changeday_index + 1]
     # 剔除不可买的股票
     df_mean = df_mean[df_mean['able_to_buy'] != 0]
     code_list = df_mean['InnerCode'][:stock_num]
+    
+    
+    ##############持仓总表#####################
     df_pos = pd.DataFrame(index=range(stock_num))
     df_pos['date'] = change_days[i]
     df_pos['InnerCode'] = code_list.values
@@ -64,17 +75,23 @@ for i in range(len(choose_days)):
     df_pos_all = pd.concat([df_pos_all, df_pos], axis=0)
 df_pos_all = df_pos_all.reset_index(drop=True)
 
+
+#################收益总表####################
 df_ret = pd.DataFrame(columns=['date', 'profit', 'capital'], index=range(len(tradingdays)))
 df_ret['date'] = tradingdays['tradingdays'].values
 df_ret['profit'] = 0.
 df_ret['capital'] = cash_initial
 take_position = 0
+
 for i in range(len(tradingdays)):
     ddd = tradingdays['tradingdays'][i]
     if ddd in change_days:
-        if ddd == change_days[0]:
+        if ddd == change_days[0]:   # 第一个选股日
             take_position += 1
+            # 第一个选股日的持仓信息（根据前二十天计算得到）
             df0 = df_pos_all[df_pos_all['date'] == ddd].reset_index(drop=True)
+            
+            # 选股日持仓状况表
             df_md = np.ones((len(df0), 8))
             for j in range(len(df0)):
                 iii = df0['InnerCode'][j]
@@ -85,29 +102,37 @@ for i in range(len(tradingdays)):
                 df_md[j, 4] = df_md[j, 3] * df_md[j, 1] * df_md[j, 2]
                 df_md[j, 5] = df_md[j, 4] * fee_buy
                 df_md[j, 7] = get_dailyquote_single(user, passwd, iii, 'ClosePrice', ddd).values[0][0]
+                
+            # 收益更新
             df_ret['profit'][i] = sum((df_md[:, 7] - df_md[:, 2]) * df_md[:, 1] * df_md[:, 3] - df_md[:, 5])
             df_ret['capital'][i] = df_ret['capital'][i - 1] + df_ret['profit'][i]
             df_md[:, 0] = df_md[:, 7] * df_md[:, 1] * df_md[:, 3]
-        else:
+        else:   # 非第一个选股日（调仓日）
             df0_old = df0
             df_md_old = df_md
+            # 注意，这里调仓的股票都是可以买的
             df0 = df_pos_all[df_pos_all['date'] == ddd].reset_index(drop=True)
             df_md = np.ones((len(df0), 8))
             divided_capital = 0
             money_collapse = 0
             for j in range(len(df0_old)):
                 iii = df0_old['InnerCode'][j]
-                if iii not in df0['InnerCode'].tolist():
-                    try:
+                if iii not in df0['InnerCode'].tolist():   # 调仓后，原持仓中平仓的股票不存在了
+                    try:                                   # 看看有没有除权除息信息
                         adj_info = get_adj_info(user, passwd, iii, ddd).values[0]
                         divided_capital = divided_capital + adj_info[0] * df_md[j, 1] * df_md[j, 3]
                         df_md[j, 3] = df_md[j, 3] * adj_info[1]
                         df_md[j, 2] = df_md[j, 3] / adj_info[1]
                     except:
                         pass
+                        
+                        
+                    ## to do：判断是否这只股票能够卖出，如发现不能，则下两行跳过（money_collapse这里没有累计，似有误）
                     open_collapse = get_dailyquote_single(user, passwd, iii, order_type, ddd).values[0][0]
-                    money_collapse = (open_collapse * (1 - fee_sell) - df_md[j, 2]) * df_md[j, 1] * df_md[j, 3]
-            for j in range(len(df0)):
+                    money_collapse = (open_collapse * (1 - fee_sell) - df_md[j, 2]) * df_md[j, 1] * df_md[j, 3]  # 平仓收益
+                    
+                    
+            for j in range(len(df0)):    # 对于新持仓的的股票
                 iii = df0['InnerCode'][j]
                 df_md[j, 0] = df_ret['capital'][i - 1] * df0['weight'][j]
                 df_md[j, 1] = basic_info_all[basic_info_all['InnerCode'] == iii]['TradingUnit'].values[0]
@@ -117,15 +142,22 @@ for i in range(len(tradingdays)):
                 money_sell = 0
                 money_buy = 0
                 money_change_fee = 0
+                
+                # 对已持有的股票进行调整
                 if iii in df0_old['InnerCode'].tolist():
-                    index = df0_old['InnerCode'].tolist().index(iii)
-                    try:
+                    index = df0_old['InnerCode'].tolist().index(iii)   # 找到这些股票旧的持仓表中的位置
+                    try:  # 除权除息
                         adj_info = get_adj_info(user, passwd, iii, ddd).values[0]
                         divided_capital = divided_capital + adj_info[0] * df_md[j, 1] * df_md[j, 3]
                         df_md[j, 3] = df_md[j, 3] * adj_info[1]
                     except:
                         pass
+                        
+                        
+                    
                     lot_add = (df_md[j, 0] - df_md_old[index, 0]) / df_md[j, 2] / df_md[j, 1]
+                    
+                    # to do： 判断是否能卖出，否则跳过下面的判断
                     if lot_add <= 0:
                         lot_add = int(-lot_add)
                         money_sell = money_sell + lot_add * df_md[j, 1] * df_md[j, 2]
