@@ -1,0 +1,10 @@
+import logging
+
+logging.basicConfig(level=logging.INFO, format=' %(asctime)s - %(levelname)s'
+                                               ' - %(message)s')  # 输出格式
+# 这里的level决定了logging.XXX要大于这个level才可以被输出。相当于一个desable
+
+logging.disable(logging.INFO)  # 禁用了DEBUG及以下级别的logging
+logging.debug('Start of program')
+logging.info('Start of program')
+logging.critical('Start of program')
